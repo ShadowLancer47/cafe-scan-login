@@ -14,7 +14,157 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      cafes: {
+        Row: {
+          created_at: string
+          description: string | null
+          email: string | null
+          id: string
+          location: string | null
+          name: string
+          phone: string | null
+          updated_at: string
+          user_id: string
+          website: string | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          email?: string | null
+          id?: string
+          location?: string | null
+          name: string
+          phone?: string | null
+          updated_at?: string
+          user_id: string
+          website?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          email?: string | null
+          id?: string
+          location?: string | null
+          name?: string
+          phone?: string | null
+          updated_at?: string
+          user_id?: string
+          website?: string | null
+        }
+        Relationships: []
+      }
+      menu_categories: {
+        Row: {
+          cafe_id: string
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          sort_order: number | null
+          updated_at: string
+        }
+        Insert: {
+          cafe_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          sort_order?: number | null
+          updated_at?: string
+        }
+        Update: {
+          cafe_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          sort_order?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_categories_cafe_id_fkey"
+            columns: ["cafe_id"]
+            isOneToOne: false
+            referencedRelation: "cafes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      menu_items: {
+        Row: {
+          category_id: string
+          created_at: string
+          description: string | null
+          id: string
+          image_url: string | null
+          is_available: boolean | null
+          name: string
+          price: number | null
+          sort_order: number | null
+          updated_at: string
+        }
+        Insert: {
+          category_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          is_available?: boolean | null
+          name: string
+          price?: number | null
+          sort_order?: number | null
+          updated_at?: string
+        }
+        Update: {
+          category_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          is_available?: boolean | null
+          name?: string
+          price?: number | null
+          sort_order?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_items_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "menu_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          first_name: string | null
+          id: string
+          last_name: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
