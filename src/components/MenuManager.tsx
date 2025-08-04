@@ -32,6 +32,7 @@ interface MenuItem {
   category_id: string;
   is_available: boolean;
   sort_order: number;
+  image_url?: string;
 }
 
 interface MenuManagerProps {
@@ -59,6 +60,7 @@ const MenuManager = ({ cafe, onBack }: MenuManagerProps) => {
     price: "",
     category_id: "",
     is_available: true,
+    image: null as File | null,
   });
 
   useEffect(() => {
@@ -140,12 +142,37 @@ const MenuManager = ({ cafe, onBack }: MenuManagerProps) => {
   const createMenuItem = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      let image_url = null;
+
+      // Upload image if provided
+      if (itemForm.image) {
+        const fileExt = itemForm.image.name.split('.').pop();
+        const fileName = `${cafe.id}/${Date.now()}.${fileExt}`;
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('menu-images')
+          .upload(fileName, itemForm.image);
+
+        if (uploadError) throw uploadError;
+
+        // Get public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('menu-images')
+          .getPublicUrl(fileName);
+        
+        image_url = publicUrl;
+      }
+
       const { error } = await supabase
         .from("menu_items")
         .insert([
           {
-            ...itemForm,
+            name: itemForm.name,
+            description: itemForm.description,
             price: parseFloat(itemForm.price),
+            category_id: itemForm.category_id,
+            is_available: itemForm.is_available,
+            image_url,
             sort_order: menuItems.filter(item => item.category_id === itemForm.category_id).length,
           },
         ]);
@@ -163,6 +190,7 @@ const MenuManager = ({ cafe, onBack }: MenuManagerProps) => {
         price: "",
         category_id: "",
         is_available: true,
+        image: null,
       });
       setShowItemForm(false);
       fetchMenuItems();
@@ -364,6 +392,22 @@ const MenuManager = ({ cafe, onBack }: MenuManagerProps) => {
                       rows={3}
                     />
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="itemImage">Image</Label>
+                    <Input
+                      id="itemImage"
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] || null;
+                        setItemForm(prev => ({ ...prev, image: file }));
+                      }}
+                      className="cursor-pointer"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Upload an image of your menu item (optional)
+                    </p>
+                  </div>
                   <div className="flex gap-2">
                     <Button type="submit">Create Item</Button>
                     <Button type="button" variant="outline" onClick={() => setShowItemForm(false)}>
@@ -391,22 +435,33 @@ const MenuManager = ({ cafe, onBack }: MenuManagerProps) => {
                     <div className="grid gap-3">
                       {categoryItems.map((item) => (
                         <Card key={item.id}>
-                          <CardContent className="flex justify-between items-start p-4">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <h4 className="font-medium">{item.name}</h4>
-                                {!item.is_available && (
-                                  <Badge variant="destructive">Unavailable</Badge>
+                          <CardContent className="flex gap-4 p-4">
+                            {item.image_url && (
+                              <div className="flex-shrink-0">
+                                <img
+                                  src={item.image_url}
+                                  alt={item.name}
+                                  className="w-20 h-20 object-cover rounded-md"
+                                />
+                              </div>
+                            )}
+                            <div className="flex-1 flex justify-between items-start">
+                              <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <h4 className="font-medium">{item.name}</h4>
+                                  {!item.is_available && (
+                                    <Badge variant="destructive">Unavailable</Badge>
+                                  )}
+                                </div>
+                                {item.description && (
+                                  <p className="text-sm text-muted-foreground mb-2">
+                                    {item.description}
+                                  </p>
                                 )}
                               </div>
-                              {item.description && (
-                                <p className="text-sm text-muted-foreground mb-2">
-                                  {item.description}
-                                </p>
-                              )}
-                            </div>
-                            <div className="text-lg font-semibold">
-                              ${item.price.toFixed(2)}
+                              <div className="text-lg font-semibold">
+                                ${item.price.toFixed(2)}
+                              </div>
                             </div>
                           </CardContent>
                         </Card>
