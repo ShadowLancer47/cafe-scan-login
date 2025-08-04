@@ -1,16 +1,21 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { User } from "@supabase/supabase-js";
 import { QrCode, Plus, Coffee, Menu } from "lucide-react";
+import CafeForm from "@/components/CafeForm";
+import MenuManager from "@/components/MenuManager";
 
 const Dashboard = () => {
   const [user, setUser] = useState<User | null>(null);
   const [cafes, setCafes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showCafeForm, setShowCafeForm] = useState(false);
+  const [selectedCafe, setSelectedCafe] = useState<any>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -40,8 +45,21 @@ const Dashboard = () => {
   };
 
   const fetchCafes = async () => {
-    // For now, set empty array since tables don't exist yet
-    setCafes([]);
+    try {
+      const { data, error } = await supabase
+        .from("cafes")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setCafes(data || []);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
   };
 
   const handleSignOut = async () => {
@@ -49,10 +67,33 @@ const Dashboard = () => {
     navigate("/");
   };
 
+  const handleCafeCreated = () => {
+    setShowCafeForm(false);
+    fetchCafes();
+  };
+
+  const handleManageMenu = (cafe: any) => {
+    setSelectedCafe(cafe);
+  };
+
+  const handleBackFromMenu = () => {
+    setSelectedCafe(null);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div>Loading...</div>
+      </div>
+    );
+  }
+
+  if (selectedCafe) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="container mx-auto px-4 py-8">
+          <MenuManager cafe={selectedCafe} onBack={handleBackFromMenu} />
+        </div>
       </div>
     );
   }
@@ -106,14 +147,19 @@ const Dashboard = () => {
               <Menu className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">0</div>
+              <div className="text-2xl font-bold">
+                {cafes.reduce((total, cafe) => {
+                  // This would need a join query in real implementation
+                  return total + 0; // Placeholder for now
+                }, 0)}
+              </div>
             </CardContent>
           </Card>
         </div>
 
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-xl font-semibold">Your Cafes</h3>
-          <Button>
+          <Button onClick={() => setShowCafeForm(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Add New Cafe
           </Button>
@@ -127,7 +173,7 @@ const Dashboard = () => {
               <p className="text-muted-foreground text-center mb-4">
                 Get started by creating your first cafe and its digital menu.
               </p>
-              <Button>
+              <Button onClick={() => setShowCafeForm(true)}>
                 <Plus className="h-4 w-4 mr-2" />
                 Create Your First Cafe
               </Button>
@@ -146,7 +192,11 @@ const Dashboard = () => {
                     <span className="text-sm text-muted-foreground">
                       {cafe.location}
                     </span>
-                    <Button variant="outline" size="sm">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handleManageMenu(cafe)}
+                    >
                       Manage Menu
                     </Button>
                   </div>
@@ -156,6 +206,18 @@ const Dashboard = () => {
           </div>
         )}
       </main>
+
+      <Dialog open={showCafeForm} onOpenChange={setShowCafeForm}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Create New Cafe</DialogTitle>
+          </DialogHeader>
+          <CafeForm 
+            onSuccess={handleCafeCreated}
+            onCancel={() => setShowCafeForm(false)}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
