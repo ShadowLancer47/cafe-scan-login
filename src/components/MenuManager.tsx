@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Edit, Trash2, ArrowLeft } from "lucide-react";
+import { Plus, Edit, Trash2, ArrowLeft, Save, X } from "lucide-react";
 
 interface Cafe {
   id: string;
@@ -47,6 +47,7 @@ const MenuManager = ({ cafe, onBack }: MenuManagerProps) => {
   const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [showItemForm, setShowItemForm] = useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const { toast } = useToast();
 
   const [categoryForm, setCategoryForm] = useState({
@@ -61,6 +62,16 @@ const MenuManager = ({ cafe, onBack }: MenuManagerProps) => {
     category_id: "",
     is_available: true,
     image: null as File | null,
+  });
+
+  const [editForm, setEditForm] = useState({
+    name: "",
+    description: "",
+    price: "",
+    category_id: "",
+    is_available: true,
+    image: null as File | null,
+    currentImageUrl: "",
   });
 
   useEffect(() => {
@@ -205,6 +216,129 @@ const MenuManager = ({ cafe, onBack }: MenuManagerProps) => {
 
   const getCategoryItems = (categoryId: string) => {
     return menuItems.filter(item => item.category_id === categoryId);
+  };
+
+  const startEditingItem = (item: MenuItem) => {
+    setEditingItem(item);
+    setEditForm({
+      name: item.name,
+      description: item.description || "",
+      price: item.price.toString(),
+      category_id: item.category_id,
+      is_available: item.is_available,
+      image: null,
+      currentImageUrl: item.image_url || "",
+    });
+  };
+
+  const cancelEditingItem = () => {
+    setEditingItem(null);
+    setEditForm({
+      name: "",
+      description: "",
+      price: "",
+      category_id: "",
+      is_available: true,
+      image: null,
+      currentImageUrl: "",
+    });
+  };
+
+  const updateMenuItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingItem) return;
+
+    try {
+      let image_url = editForm.currentImageUrl;
+
+      // Upload new image if provided
+      if (editForm.image) {
+        // Delete old image if exists
+        if (editForm.currentImageUrl) {
+          const oldPath = editForm.currentImageUrl.split('/menu-images/')[1];
+          if (oldPath) {
+            await supabase.storage.from('menu-images').remove([oldPath]);
+          }
+        }
+
+        const fileExt = editForm.image.name.split('.').pop();
+        const fileName = `${cafe.id}/${Date.now()}.${fileExt}`;
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('menu-images')
+          .upload(fileName, editForm.image);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('menu-images')
+          .getPublicUrl(fileName);
+        
+        image_url = publicUrl;
+      }
+
+      const { error } = await supabase
+        .from("menu_items")
+        .update({
+          name: editForm.name,
+          description: editForm.description,
+          price: parseFloat(editForm.price),
+          category_id: editForm.category_id,
+          is_available: editForm.is_available,
+          image_url,
+        })
+        .eq("id", editingItem.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Menu item updated successfully!",
+      });
+
+      cancelEditingItem();
+      fetchMenuItems();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const deleteMenuItem = async (item: MenuItem) => {
+    if (!confirm(`Are you sure you want to delete "${item.name}"?`)) return;
+
+    try {
+      // Delete image from storage if exists
+      if (item.image_url) {
+        const imagePath = item.image_url.split('/menu-images/')[1];
+        if (imagePath) {
+          await supabase.storage.from('menu-images').remove([imagePath]);
+        }
+      }
+
+      const { error } = await supabase
+        .from("menu_items")
+        .delete()
+        .eq("id", item.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Menu item deleted successfully!",
+      });
+
+      fetchMenuItems();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
   };
 
   if (loading) {
@@ -435,35 +569,152 @@ const MenuManager = ({ cafe, onBack }: MenuManagerProps) => {
                     <div className="grid gap-3">
                       {categoryItems.map((item) => (
                         <Card key={item.id}>
-                          <CardContent className="flex gap-4 p-4">
-                            {item.image_url && (
-                              <div className="flex-shrink-0">
-                                <img
-                                  src={item.image_url}
-                                  alt={item.name}
-                                  className="w-20 h-20 object-cover rounded-md"
-                                />
-                              </div>
-                            )}
-                            <div className="flex-1 flex justify-between items-start">
-                              <div>
-                                <div className="flex items-center gap-2 mb-1">
-                                  <h4 className="font-medium">{item.name}</h4>
-                                  {!item.is_available && (
-                                    <Badge variant="destructive">Unavailable</Badge>
+                          {editingItem?.id === item.id ? (
+                            <CardContent className="p-4">
+                              <form onSubmit={updateMenuItem} className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div className="space-y-2">
+                                    <Label htmlFor={`edit-name-${item.id}`}>Item Name *</Label>
+                                    <Input
+                                      id={`edit-name-${item.id}`}
+                                      value={editForm.name}
+                                      onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+                                      required
+                                    />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <Label htmlFor={`edit-price-${item.id}`}>Price *</Label>
+                                    <Input
+                                      id={`edit-price-${item.id}`}
+                                      type="number"
+                                      step="0.01"
+                                      value={editForm.price}
+                                      onChange={(e) => setEditForm(prev => ({ ...prev, price: e.target.value }))}
+                                      required
+                                    />
+                                  </div>
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor={`edit-category-${item.id}`}>Category *</Label>
+                                  <select
+                                    id={`edit-category-${item.id}`}
+                                    value={editForm.category_id}
+                                    onChange={(e) => setEditForm(prev => ({ ...prev, category_id: e.target.value }))}
+                                    className="w-full p-2 border border-input rounded-md bg-background"
+                                    required
+                                  >
+                                    {categories.map((category) => (
+                                      <option key={category.id} value={category.id}>
+                                        {category.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor={`edit-description-${item.id}`}>Description</Label>
+                                  <Textarea
+                                    id={`edit-description-${item.id}`}
+                                    value={editForm.description}
+                                    onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
+                                    rows={2}
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor={`edit-image-${item.id}`}>Change Image</Label>
+                                  {editForm.currentImageUrl && (
+                                    <div className="mb-2">
+                                      <img
+                                        src={editForm.currentImageUrl}
+                                        alt="Current image"
+                                        className="w-20 h-20 object-cover rounded-md"
+                                      />
+                                      <p className="text-xs text-muted-foreground mt-1">Current image</p>
+                                    </div>
+                                  )}
+                                  <Input
+                                    id={`edit-image-${item.id}`}
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0] || null;
+                                      setEditForm(prev => ({ ...prev, image: file }));
+                                    }}
+                                    className="cursor-pointer"
+                                  />
+                                  <p className="text-xs text-muted-foreground">
+                                    Upload a new image to replace the current one (optional)
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    id={`edit-available-${item.id}`}
+                                    checked={editForm.is_available}
+                                    onChange={(e) => setEditForm(prev => ({ ...prev, is_available: e.target.checked }))}
+                                  />
+                                  <Label htmlFor={`edit-available-${item.id}`}>Available</Label>
+                                </div>
+                                <div className="flex gap-2">
+                                  <Button type="submit" size="sm">
+                                    <Save className="h-4 w-4 mr-2" />
+                                    Save
+                                  </Button>
+                                  <Button type="button" variant="outline" size="sm" onClick={cancelEditingItem}>
+                                    <X className="h-4 w-4 mr-2" />
+                                    Cancel
+                                  </Button>
+                                </div>
+                              </form>
+                            </CardContent>
+                          ) : (
+                            <CardContent className="flex gap-4 p-4">
+                              {item.image_url && (
+                                <div className="flex-shrink-0">
+                                  <img
+                                    src={item.image_url}
+                                    alt={item.name}
+                                    className="w-20 h-20 object-cover rounded-md"
+                                  />
+                                </div>
+                              )}
+                              <div className="flex-1 flex justify-between items-start">
+                                <div>
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <h4 className="font-medium">{item.name}</h4>
+                                    {!item.is_available && (
+                                      <Badge variant="destructive">Unavailable</Badge>
+                                    )}
+                                  </div>
+                                  {item.description && (
+                                    <p className="text-sm text-muted-foreground mb-2">
+                                      {item.description}
+                                    </p>
                                   )}
                                 </div>
-                                {item.description && (
-                                  <p className="text-sm text-muted-foreground mb-2">
-                                    {item.description}
-                                  </p>
-                                )}
+                                <div className="flex items-center gap-2">
+                                  <div className="text-lg font-semibold">
+                                    ${item.price.toFixed(2)}
+                                  </div>
+                                  <div className="flex gap-1">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => startEditingItem(item)}
+                                    >
+                                      <Edit className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => deleteMenuItem(item)}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </div>
                               </div>
-                              <div className="text-lg font-semibold">
-                                ${item.price.toFixed(2)}
-                              </div>
-                            </div>
-                          </CardContent>
+                            </CardContent>
+                          )}
                         </Card>
                       ))}
                     </div>
